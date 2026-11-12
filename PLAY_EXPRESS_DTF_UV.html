@@ -59,7 +59,7 @@ async function buildSVG(sheet){
    }
    images.push(p.rotated?'<g transform="translate('+(x+pw)+' '+y+') rotate(90)">'+content+'</g>':'<g transform="translate('+x+' '+y+')">'+content+'</g>');
  }
- return '<?xml version="1.0" encoding="UTF-8"?>\\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="'+w+'mm" height="'+h+'mm" viewBox="0 0 '+w+' '+h+'">\\n'+images.join('\\n')+'\\n</svg>';
+ return '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="'+w+'mm" height="'+h+'mm" viewBox="0 0 '+w+' '+h+'">\n'+images.join('\n')+'\n</svg>';
 }
 function saveBlob(blob,name){let a=document.createElement('a'),url=URL.createObjectURL(blob);a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)}
 // ZIP sin dependencias para descargar todos los SVG de un pedido en un solo archivo.

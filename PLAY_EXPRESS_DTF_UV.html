@@ -31,20 +31,40 @@ function finishOrder(i){if(!confirm('¿Ya descargaste y verificaste los SVG en t
 // Las imágenes originales se incorporan como data URI: SVG permanece SVG y PNG conserva su alfa.
 function safeName(s){return s.replace(/[\\/:*?"<>|]/g,'').trim().slice(0,80)||'Cliente'}
 function svgAttr(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
-function buildSVG(sheet){
- const w=sheet.w,h=sheet.h;
- const images=sheet.placed.map(p=>{
+async function buildSVG(sheet){
+ const w=sheet.w,h=sheet.h,images=[];
+ for(const p of sheet.placed){
    const x=+p.x.toFixed(5),y=+p.y.toFixed(5),pw=+p.w.toFixed(5),ph=+p.h.toFixed(5);
-   const url=svgAttr(p.url);
-   if(p.rotated)return `<image href="${url}" x="0" y="0" width="${ph}" height="${pw}" preserveAspectRatio="none" transform="translate(${x+pw} ${y}) rotate(90)"/>`;
-   return `<image href="${url}" x="${x}" y="${y}" width="${pw}" height="${ph}" preserveAspectRatio="none"/>`;
- }).join('\n');
- return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">\n${images}\n</svg>`;
+   const isSVG=/^data:image\/svg\+xml[;,]/i.test(p.url);
+   let content;
+   if(isSVG){
+     const source=await (await fetch(p.url)).text();
+     const doc=new DOMParser().parseFromString(source,'image/svg+xml');
+     const root=doc.documentElement;
+     if(root.localName!=='svg'||doc.querySelector('parsererror'))throw Error('SVG original no válido: '+p.name);
+     root.querySelectorAll('script,foreignObject,iframe,object,embed').forEach(el=>el.remove());
+     root.querySelectorAll('*').forEach(el=>{for(const a of [...el.attributes])if(/^on/i.test(a.name))el.removeAttribute(a.name)});
+     let vb=root.getAttribute('viewBox');
+     if(!vb){const ow=parseFloat(root.getAttribute('width'))||100,oh=parseFloat(root.getAttribute('height'))||100;vb='0 0 '+ow+' '+oh}
+     root.setAttribute('viewBox',vb);
+     root.setAttribute('width',String(p.rotated?ph:pw));
+     root.setAttribute('height',String(p.rotated?pw:ph));
+     root.setAttribute('x','0');root.setAttribute('y','0');
+     root.setAttribute('preserveAspectRatio','none');
+     root.removeAttribute('style');
+     content=new XMLSerializer().serializeToString(root);
+   }else{
+     const iw=p.rotated?ph:pw,ih=p.rotated?pw:ph;
+     content='<image href="'+svgAttr(p.url)+'" xlink:href="'+svgAttr(p.url)+'" x="0" y="0" width="'+iw+'" height="'+ih+'" preserveAspectRatio="none"/>';
+   }
+   images.push(p.rotated?'<g transform="translate('+(x+pw)+' '+y+') rotate(90)">'+content+'</g>':'<g transform="translate('+x+' '+y+')">'+content+'</g>');
+ }
+ return '<?xml version="1.0" encoding="UTF-8"?>\\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="'+w+'mm" height="'+h+'mm" viewBox="0 0 '+w+' '+h+'">\\n'+images.join('\\n')+'\\n</svg>';
 }
 function saveBlob(blob,name){let a=document.createElement('a'),url=URL.createObjectURL(blob);a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)}
 // ZIP sin dependencias para descargar todos los SVG de un pedido en un solo archivo.
 const encoder=new TextEncoder();
 function crc32(bytes){let c=0xffffffff;for(let b of bytes){c^=b;for(let j=0;j<8;j++)c=(c>>>1)^((c&1)?0xedb88320:0)}return (c^0xffffffff)>>>0}
 function zipSVG(files){let parts=[],central=[],offset=0;for(let f of files){let name=encoder.encode(f.name),data=encoder.encode(f.content),crc=crc32(data),local=new Uint8Array(30+name.length),v=new DataView(local.buffer);v.setUint32(0,0x04034b50,true);v.setUint16(4,20,true);v.setUint16(8,0,true);v.setUint32(14,crc,true);v.setUint32(18,data.length,true);v.setUint32(22,data.length,true);v.setUint16(26,name.length,true);local.set(name,30);parts.push(local,data);let dir=new Uint8Array(46+name.length),d=new DataView(dir.buffer);d.setUint32(0,0x02014b50,true);d.setUint16(4,20,true);d.setUint16(6,20,true);d.setUint32(16,crc,true);d.setUint32(20,data.length,true);d.setUint32(24,data.length,true);d.setUint16(28,name.length,true);d.setUint32(42,offset,true);dir.set(name,46);central.push(dir);offset+=local.length+data.length}let cdSize=central.reduce((n,x)=>n+x.length,0),end=new Uint8Array(22),e=new DataView(end.buffer);e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,cdSize,true);e.setUint32(16,offset,true);return new Blob([...parts,...central,end],{type:'application/zip'})}
-function downloadOrder(i){let o=orders[i];if(!o)return;try{let base=safeName(o.name),files=o.sheets.map((sheet,j)=>({name:`${base} - pliego ${j+1} - 30x${sheet.h/10}cm.svg`,content:buildSVG(sheet)}));if(files.length===1)saveBlob(new Blob([files[0].content],{type:'image/svg+xml;charset=utf-8'}),`${base} - 1 pliego 30x${o.sheets[0].h/10}cm.svg`);else saveBlob(zipSVG(files),`${base} - ${files.length} pliegos SVG.zip`)}catch(e){alert('Error al generar SVG: '+e.message)}}
+async function downloadOrder(i){let o=orders[i];if(!o)return;try{let base=safeName(o.name),files=await Promise.all(o.sheets.map(async(sheet,j)=>({name:`${base} - pliego ${j+1} - 30x${sheet.h/10}cm.svg`,content:await buildSVG(sheet)})));if(files.length===1)saveBlob(new Blob([files[0].content],{type:'image/svg+xml;charset=utf-8'}),`${base} - 1 pliego 30x${o.sheets[0].h/10}cm.svg`);else saveBlob(zipSVG(files),`${base} - ${files.length} pliegos SVG.zip`)}catch(e){alert('Error al generar SVG: '+e.message)}}
 </script></body></html>

@@ -42,7 +42,22 @@ async function downloadMontage(orderId){
    if(![x,y,pw,ph].every(Number.isFinite)||x<0||y<0||pw<=0||ph<=0||x+pw>w+.01||y+ph>h+.01)throw Error("Ubicación de diseño inválida.");
    const src=await imageData(p.nombre);
    const innerW=p.girado?ph:pw,innerH=p.girado?pw:ph;
-   const img='<image href="'+xml(src)+'" x="0" y="0" width="'+innerW+'" height="'+innerH+'" preserveAspectRatio="none"/>';
+   let img;
+   if(src.startsWith("data:image/svg+xml")){
+    const raw=src.split(",")[1]||"";
+    const source=src.includes(";base64,")?atob(raw):decodeURIComponent(raw);
+    const doc=new DOMParser().parseFromString(source,"image/svg+xml");
+    if(doc.querySelector("parsererror"))throw Error("SVG original inválido: "+p.nombre);
+    const root=doc.documentElement;
+    if(root.localName!=="svg")throw Error("El diseño no es un SVG válido: "+p.nombre);
+    root.querySelectorAll("script,foreignObject,iframe,object,embed").forEach(node=>node.remove());
+    root.querySelectorAll("*").forEach(node=>{for(const attr of Array.from(node.attributes)){if(/^on/i.test(attr.name)||(/^(href|xlink:href)$/i.test(attr.name)&&/^(https?:|javascript:)/i.test(attr.value)))node.removeAttribute(attr.name)}});
+    for(const attr of Array.from(root.attributes)){if(/^on/i.test(attr.name))root.removeAttribute(attr.name)}
+    root.setAttribute("x","0");root.setAttribute("y","0");root.setAttribute("width",String(innerW));root.setAttribute("height",String(innerH));root.setAttribute("preserveAspectRatio","none");
+    img=new XMLSerializer().serializeToString(root);
+   }else{
+    img='<image href="'+xml(src)+'" x="0" y="0" width="'+innerW+'" height="'+innerH+'" preserveAspectRatio="none"/>';
+   }
    nodes.push(p.girado?'<g transform="translate('+(x+pw)+' '+y+') rotate(90)">'+img+'</g>':'<g transform="translate('+x+' '+y+')">'+img+'</g>');
   }
   const svg='<?xml version="1.0" encoding="UTF-8"?>'+String.fromCharCode(10)+'<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'mm" height="'+h+'mm" viewBox="0 0 '+w+' '+h+'">'+String.fromCharCode(10)+nodes.join(String.fromCharCode(10))+String.fromCharCode(10)+'</svg>';

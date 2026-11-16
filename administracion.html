@@ -45,7 +45,7 @@ async function downloadMontage(orderId){
    const img='<image href="'+xml(src)+'" x="0" y="0" width="'+innerW+'" height="'+innerH+'" preserveAspectRatio="none"/>';
    nodes.push(p.girado?'<g transform="translate('+(x+pw)+' '+y+') rotate(90)">'+img+'</g>':'<g transform="translate('+x+' '+y+')">'+img+'</g>');
   }
-  const svg='<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'mm" height="'+h+'mm" viewBox="0 0 '+w+' '+h+'">\n'+nodes.join('\n')+'\n</svg>';
+  const svg='<?xml version="1.0" encoding="UTF-8"?>'+String.fromCharCode(10)+'<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'mm" height="'+h+'mm" viewBox="0 0 '+w+' '+h+'">'+String.fromCharCode(10)+nodes.join(String.fromCharCode(10))+String.fromCharCode(10)+'</svg>';
   saved.push({name:'Montaje '+(i+1)+' - 30x'+(h/10)+'cm.svg',svg});
  }
  for(const f of saved){

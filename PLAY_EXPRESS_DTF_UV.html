@@ -47,9 +47,8 @@ async function submitOrder(){
   const response=await fetch(FUNCTION_URL,{method:'POST',headers:{apikey:PUBLIC_KEY},body:form});
   const result=await response.json().catch(()=>({}));
   if(!response.ok||!result.ok)throw Error(result.error||'No se pudo enviar el pedido');
-  const number=result.pedido?.numero_pedido;
-  $('sendStatus').textContent='¡Solicitud recibida! '+(number?'Número de pedido: UV-'+String(number).padStart(6,'0')+'. ':'')+'Play Express revisará tus archivos.';
-  alert('¡Pedido enviado correctamente a Play Express!'+(number?'\\nPedido UV-'+String(number).padStart(6,'0'):''));
+  $('sendStatus').textContent='¡Solicitud enviada correctamente! Hemos recibido tus archivos. Play Express revisará tu solicitud y se pondrá en contacto contigo.';
+  alert('¡Solicitud enviada correctamente! Play Express revisará tus archivos y se pondrá en contacto contigo.');
  }catch(error){$('sendStatus').textContent='No se pudo enviar: '+error.message+' Puedes intentar nuevamente.';alert('No se pudo enviar el pedido: '+error.message)}
  finally{btn.disabled=false;btn.textContent='Enviar solicitud a Play Express';if(window.turnstile&&turnstileWidget!==null)window.turnstile.reset(turnstileWidget)}
 }

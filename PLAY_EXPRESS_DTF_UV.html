@@ -20,7 +20,36 @@ function schedulePreview(){clearTimeout(previewTimer);if(!designs.length){sheets
 function resetAll(){designs=[];clearSelection();renderItems();schedulePreview()}
 // Rectangle shelf packing: deterministic, tries several orderings and 90-degree rotations.
 function packShelf(pieces,limit,mode){let sorted=[...pieces].sort((a,b)=>mode===0?Math.max(b.w,b.h)-Math.max(a.w,a.h):mode===1?b.w*b.h-a.w*a.h:mode===2?b.h-a.h:b.w-a.w);let placed=[],rows=[],remaining=[];for(const p of sorted){let choices=[];for(const rotated of [false,true]){let w=rotated?p.h:p.w,h=rotated?p.w:p.h;if(w>WIDTH+1e-6||h>limit+1e-6)continue;for(let j=0;j<rows.length;j++){let r=rows[j],x=r.used? r.used+GAP:0;if(x+w<=WIDTH+1e-6&&h<=r.h+1e-6){choices.push({x,y:r.y,w,h,rotated,row:j,score:(r.h-h)*10000+(WIDTH-x-w)})}}let y=rows.length?rows[rows.length-1].y+rows[rows.length-1].h+GAP:0;if(y+h<=limit+1e-6)choices.push({x:0,y,w,h,rotated,row:-1,score:1000000+y*100+(WIDTH-w)})}choices.sort((a,b)=>a.score-b.score);let c=choices[0];if(!c){remaining.push(p);continue}if(c.row===-1)rows.push({y:c.y,h:c.h,used:c.w});else rows[c.row].used=c.x+c.w;placed.push({...p,...c})}let used=rows.length?rows[rows.length-1].y+rows[rows.length-1].h:0;return {placed,remaining,used}}
-function makePlan(pieces){let left=[...pieces],out=[],guard=0;while(left.length&&guard++<1000){let candidates=[];for(const limit of [500,1000])for(let mode=0;mode<4;mode++){let r=packShelf(left,limit,mode);if(r.placed.length)candidates.push({...r,limit,score:r.placed.reduce((a,p)=>a+p.w*p.h,0)/limit})}if(!candidates.length)throw Error('Algún diseño no cabe en los formatos permitidos.');let full=candidates.filter(x=>x.remaining.length===0);let best;if(full.length)best=full.sort((a,b)=>a.limit-b.limit||a.used-b.used)[0];else best=candidates.sort((a,b)=>b.score-a.score||b.placed.length-a.placed.length)[0];out.push({w:WIDTH,h:best.limit,placed:best.placed});left=best.remaining}return out}
+function packDense(pieces,limit,mode){
+ const sorted=[...pieces].sort((a,b)=>mode===0?b.w*b.h-a.w*a.h:mode===1?Math.max(b.w,b.h)-Math.max(a.w,a.h):mode===2?b.h-a.h:b.w-a.w);
+ let free=[{x:0,y:0,w:WIDTH+GAP,h:limit+GAP}],placed=[],remaining=[];
+ for(const p of sorted){
+  let best=null;
+  for(const rotated of [false,true]){
+   const w=rotated?p.h:p.w,h=rotated?p.w:p.h;
+   if(w>WIDTH||h>limit)continue;
+   for(const f of free){
+    if(w+GAP>f.w+1e-6||h+GAP>f.h+1e-6)continue;
+    const score=Math.min(f.w-w-GAP,f.h-h-GAP)*10000+Math.max(f.w-w-GAP,f.h-h-GAP);
+    if(!best||score<best.score)best={x:f.x,y:f.y,w,h,rotated,score};
+   }
+  }
+  if(!best){remaining.push(p);continue}
+  placed.push({...p,x:best.x,y:best.y,w:best.w,h:best.h,rotated:best.rotated});
+  const used={x:best.x,y:best.y,w:best.w+GAP,h:best.h+GAP};
+  let next=[];
+  for(const f of free){
+   if(used.x>=f.x+f.w||used.x+used.w<=f.x||used.y>=f.y+f.h||used.y+used.h<=f.y){next.push(f);continue}
+   if(used.x>f.x)next.push({x:f.x,y:f.y,w:used.x-f.x,h:f.h});
+   if(used.x+used.w<f.x+f.w)next.push({x:used.x+used.w,y:f.y,w:f.x+f.w-used.x-used.w,h:f.h});
+   if(used.y>f.y)next.push({x:f.x,y:f.y,w:f.w,h:used.y-f.y});
+   if(used.y+used.h<f.y+f.h)next.push({x:f.x,y:used.y+used.h,w:f.w,h:f.y+f.h-used.y-used.h});
+  }
+  free=next.filter((a,i)=>a.w>0.001&&a.h>0.001&&!next.some((b,j)=>i!==j&&a.x>=b.x-1e-6&&a.y>=b.y-1e-6&&a.x+a.w<=b.x+b.w+1e-6&&a.y+a.h<=b.y+b.h+1e-6&&(b.w*b.h>a.w*a.h+1e-6||j<i)));
+ }
+ return {placed,remaining,used:placed.reduce((m,p)=>Math.max(m,p.y+p.h),0)};
+}
+function makePlan(pieces){let left=[...pieces],out=[],guard=0;while(left.length&&guard++<1000){let candidates=[];for(const limit of [500,1000])for(let mode=0;mode<4;mode++){for(const packer of [packShelf,packDense]){let r=packer(left,limit,mode);if(r.placed.length)candidates.push({...r,limit,score:r.placed.reduce((a,p)=>a+p.w*p.h,0)/limit})}}if(!candidates.length)throw Error('Algún diseño no cabe en los formatos permitidos.');let full=candidates.filter(x=>x.remaining.length===0);let best;if(full.length)best=full.sort((a,b)=>a.limit-b.limit||a.used-b.used)[0];else best=candidates.sort((a,b)=>b.score-a.score||b.placed.length-a.placed.length)[0];out.push({w:WIDTH,h:best.limit,placed:best.placed});left=best.remaining}return out}
 function sheetSummary(list){let small=list.filter(x=>x.h===500).length,big=list.filter(x=>x.h===1000).length;let parts=[];if(big)parts.push(`${big} ${big===1?'pliego':'pliegos'} 30×100 cm`);if(small)parts.push(`${small===1?'Medio pliego':small+' medios pliegos'} 30×50 cm`);return parts.join(' + ')||'Sin pliegos'}
 function generate(silent=false){try{if(!designs.length)throw Error('Primero agrega al menos un diseño.');let pieces=[];for(const d of designs)for(let i=0;i<d.qty;i++)pieces.push({id:d.id,name:d.name,url:d.url,w:d.w,h:d.h});if(pieces.length>800)throw Error('Para esta demo el máximo es 800 logos por pedido.');sheets=makePlan(pieces);$('summary').innerHTML=`<span class="stat"><strong>${sheetSummary(sheets)}</strong></span>`;renderPreview();let advice=$('sheetAdvice');let longSheets=sheets.filter(sh=>sh.h===1000);if(longSheets.length){let totalArea=sheets.reduce((n,sh)=>n+sh.w*sh.h,0);let usedArea=sheets.reduce((n,sh)=>n+sh.placed.reduce((m,p)=>m+p.w*p.h,0),0);let pct=Math.min(100,Math.round(usedArea/totalArea*100));advice.classList.remove('hide');advice.innerHTML='<strong>💡 ¡Aprovecha mejor tu plancha!</strong><p>Tu montaje requiere '+(longSheets.length===1?'una plancha de 30 × 100 cm':'planchas de 30 × 100 cm')+' porque los diseños no caben en el formato de 30 × 50 cm. La superficie ocupada es aproximadamente <strong>'+pct+'%</strong> (incluyendo el espacio rectangular de cada diseño).</p><p>Si te queda espacio libre, puedes agregar más diseños o aumentar las cantidades para aprovechar la plancha. El porcentaje es orientativo y no representa la cobertura de tinta.</p>'}else{advice.classList.add('hide');advice.textContent=''}$('sendArea').classList.remove('hide');let flagged=designs.filter(d=>d.white);$('whiteWarning').classList.toggle('hide',!flagged.length);$('whiteWarning').textContent=flagged.length?'⚠️ Estas imágenes parecen tener un fondo blanco: '+flagged.map(d=>d.name).join(', ')+'. Ese fondo podría salir impreso. Si no lo quieres, sube los archivos con fondo transparente. Esta revisión es automática y orientativa.':'';$('clientStatus').textContent='Montaje actualizado automáticamente.'}catch(e){sheets=[];$('sendArea').classList.add('hide');$('sheetAdvice').classList.add('hide');$('preview').className='empty';$('preview').textContent=e.message;if(!silent)alert(e.message);$('clientStatus').textContent=e.message}}
 function renderSheet(s,scale){let W=s.w*scale,H=s.h*scale;return `<div class="sheet" style="width:${W}px;height:${H}px">${s.placed.map(p=>p.rotated?`<div style="position:absolute;left:${p.x*scale}px;top:${p.y*scale}px;width:${p.w*scale}px;height:${p.h*scale}px;overflow:hidden"><img src="${p.url}" title="${esc(p.name)}" style="position:absolute;left:${p.w*scale}px;top:0;width:${p.h*scale}px;height:${p.w*scale}px;transform-origin:top left;transform:rotate(90deg)"></div>`:`<img src="${p.url}" title="${esc(p.name)}" style="left:${p.x*scale}px;top:${p.y*scale}px;width:${p.w*scale}px;height:${p.h*scale}px">`).join('')}</div>`}

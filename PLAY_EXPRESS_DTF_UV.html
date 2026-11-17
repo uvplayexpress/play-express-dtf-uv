@@ -62,7 +62,6 @@ async function submitOrder(){
  if(!$('email').checkValidity()){alert('Ingresa un correo válido.');$('email').focus();return}
  const whatsappDigits=$('phone').value.replace(/\D/g,'');if(!/^\d{8}$/.test(whatsappDigits)){alert('Escribe los 8 números de tu WhatsApp después de +569.');$('phone').focus();return}
  if(!sheets.length||!designs.length){alert('Primero prepara el montaje.');return}
- if(designs.length>20){alert('Puedes enviar hasta 20 diseños por pedido.');return}
  if(!window.turnstile||turnstileWidget===null){$('sendStatus').textContent='No se cargó la verificación de seguridad. Actualiza la página e inténtalo otra vez.';alert('No se cargó la verificación de Cloudflare. Actualiza la página e inténtalo otra vez.');setupTurnstile();return}
  const token=window.turnstile.getResponse(turnstileWidget);
  if(!token){$('sendStatus').textContent='Completa la verificación de seguridad para continuar.';alert('Completa la verificación de seguridad de Cloudflare antes de enviar.');return}
